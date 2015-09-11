@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+
+<!-- 
+This is example file how HADAQ event building with TDC calibration could be configured in DABC.
+
+Event building process implemented in Combiner module of hadaq::CombinerModule class.
+Module can have several inputs, each with separate port number for receiving data 
+from TRB boards. For every input one could configure only UDP port number - host name is ignored.
+First output of combiner module used for delivering data to online analysis (if any). 
+Second output can be use to store data in hld files. 
+To enable HLD file storage one should specify NumOutputs for Combiner module
+and provide hld file name for Output1 port   
+
+     <NumOutputs value="2"/>
+     <OutputPort name="Output1" url="hld://dabc.hld?maxsize=2000"/>
+     
+File name fill be extended according to HADAQ naming convention.       
+
+By default, HTTP server is enabled. Do disable it, remove <HttpServer> section or
+put <HttpServer name="http" auto="false">. One could change http port number. 
+When dabc runs, in any browser address like
+http://your_dabc_host_name:8090 can be opened. At the moment http server provides: 
+  - ratemeters from EventBuilder
+  - log fields 
+  - commands to start/stop hld files storage from browser
+
+There is well-known problem with using VNC viewer and mbs stream server. 
+Both by default are using port 6002. One could change port number for stream server.
+Just set other number in configuration of first output port of combiner module, for instance:
+       <OutputPort name="Output0" url="mbs://Stream:6789?iter=hadaq_iter&subid=0x1f"/>
+In this case one should specify that port number when starting go4 analysis like:
+   [shell] go4analysis -stream dabc_node:6789 -dabc dabc_node:4444 
+When starting analysis from the go4 gui, one should specify stream server with port number too.
+
+-->
+
+<dabc version="2">
+  <Context host="localhost" name="EventBuilder">
+    <Run>
+      <lib value="libDabcMbs.so"/>
+      <lib value="libDabcHadaq.so"/>  
+      <lib value="libDabcHttp.so"/>  
+      <lib value="libDabcRfio.so"/>  
+      <lib value="libDabcStream.so"/>  
+      <logfile value="hadaqevtbuild.log"/>
+      <loglevel value="-1"/>
+      <loglimit value="1000"/>
+      <control value="true"/>
+      <threads_layout value="balanced"/>
+    </Run>
+    
+    <HttpServer name="http" port="8090"/>
+    
+    <!-- If uncommented, all internal manager structures will be published in the web server -->
+    <Publisher name="publ" manager="true"/>
+    
+    <!-- If uncommented, profiling will be enabled for all threads -->
+    <!-- Thread name="*" publ="true" prof="true"/ -->
+    
+    <MemoryPool name="Pool">
+       <BufferSize value="200000"/>
+       <NumBuffers value="1000"/>
+    </MemoryPool>
+    
+    <!-- these are default parameters for TDC calibration modules -->
+    <Module name="Input*TdcCal">    
+       <!-- Minimal and maximal bins for linear calibration -->
+       <FineMin value="31"/>
+       <FineMax value="480"/>
+       
+       <!-- number of TDC channels -->
+       <NumChannels value="49"/>
+       
+       <!-- 1 - use only rising edge, falling edge is ignore
+            2 - falling edge enabled and fully independent from rising edge
+            3 - falling edge enabled and uses calibration from rising edge
+            4 - falling edge enabled and common statistic is used for calibration -->
+       <EdgeMask value="1"/>
+       
+       <!-- histogram filling level
+            0 - no histograms,
+            1 - only generic statistic for TRB
+            2 - basic statistic for TDC (like hits per channel)
+            3 - histograms for each active channel will be created, 
+            4 - also reference histograms could be created (not yet available in DABC)  -->
+       <HistFilling value="4"/>
+       
+       <!-- file prefix where calibration will be stored or loaded -->
+       <CalibrFile value="local"/>
+       
+       <!-- Which channels should be excluded from calibration - either file will be used or just linear function -->
+       <!--  DisableCalibrationFor value="0"/-->
+       
+       <!-- Number of counts in each channel to perform calibration -->
+       <Auto value="1000"/>
+    </Module>
+    
+
+    <Module name="Combiner" class="hadaq::CombinerModule">    
+        <!-- these parameters will force to create inputs/outputs of module -->
+       <NumInputs value="1"/>
+       <NumOutputs value="1"/>
+
+       <InputPort name="Input0" url="hadaq://host:50000" urlopt1="trb=0x8000&tdc=[0xe000,0xe001,0xe002,0xe003]"/>
+       <!--InputPort name="Input0" url="hadaq://host:10101" urlopt1="trb=0x8000&tdc=[0x3000,0x3001,0x3002,0x3003]&hub=0x8010"/-->
+       <!--InputPort name="Input1" url="hadaq://host:10102" urlopt1="trb=0x8010&tdc=[0x3010,0x3011,0x3012,0x3013]"/-->
+       <!--InputPort name="Input2" url="hadaq://host:10103" urlopt1="trb=0x8020&tdc=[0x3020,0x3021,0x3022,0x3023]"/-->
+       <!--InputPort name="Input3" url="hadaq://host:10104" urlopt1="trb=0x8030&tdc=[0x3030,0x3031,0x3032,0x3033]"/-->
+       <!--InputPort name="Input4" url="hadaq://host:10105" urlopt1="trb=0x8040&tdc=[0x3040,0x3041,0x3042,0x3043]"/-->
+
+       <InputPort name="Input*" queue="10" urlopt="udpbuf=200000&mtu=64512&flush=2&observer=false&debug&dummy"/>
+
+       <ExtraDebug value="false"/>
+
+       <!--  this is stream server for online monitoring, normally always on -->
+       <OutputPort name="Output0" url="mbs://Stream:6002?iter=hadaq_iter&subid=0x1f"/>
+
+       <!--  this is example of HLD file storage - local and RFIO -->
+       <!--OutputPort name="Output1" url="hld://dabc.hld?maxsize=2000"/-->
+       <!--OutputPort name="Output1" url="hld:///linev/path/dabc.hld?maxsize=1900&rfio"/-->
+
+       <FlushTimeout value="2.0"/>   
+       
+       <!--TriggerNumRange: defines when trigger sequence number wraps. only 16 bit for HADES EBs, 24 bit for trb3!  -->
+       <TriggerNumRange value="0x1000000"/>
+       
+       <!--AccountLostEventDiff: if true, missing trigger sequence number are added as lost events to stats. Disabled for multiple event builder mode!  -->
+       <AccountLostEventDiff value="true"/>
+       
+       <!-- rate meters configuration -->
+       <HadaqData width="4" prec="2" low="0" up="10" debug="1"/>
+       <HadaqEvents width="5" prec="1" low="0" up="1000" debug="1"/>
+       <HadaqDroppedData width="5" prec="3" low="0" up="1" debug="1"/>
+       <HadaqLostEvents width="4" prec="2" low="0" up="100" debug="1"/>
+     </Module>
+     
+     <!-- Terminal output like old event builder -->
+     <Module name="Term" class="hadaq::TerminalModule" period="0.3" clear="false"/>
+     
+  </Context>
+
+</dabc>
+
